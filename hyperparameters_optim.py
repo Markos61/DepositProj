@@ -1,7 +1,6 @@
 ##
 import pandas as pd
 import numpy as np
-import joblib
 from catboost import CatBoostClassifier
 from sklearn.model_selection import TimeSeriesSplit
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
@@ -17,6 +16,7 @@ space = {
     'depth': hp.choice('depth', [4, 6, 8, 10]),
     'l2_leaf_reg': hp.uniform('l2_leaf_reg', 1, 10),
     'border_count': hp.choice('border_count', [32, 64, 128]),
+    'learning_rate': hp.choice('learning_rate', [4, 6, 8, 10]),
 }
 
 
@@ -30,13 +30,14 @@ def objective(params):
 
         clf = CatBoostClassifier(
             **params,
-            iterations=1000,  # Меньше итераций для скорости поиска
+            iterations=1000,
             eval_metric="AUC",
             cat_features=categorical_features,
             auto_class_weights="Balanced",
             early_stopping_rounds=50,
             verbose=False,
-            random_seed=42
+            task_type="GPU",
+            devices="0"
         )
 
         clf.fit(X_train_w, y_train_w, eval_set=(X_test_w, y_test_w))
@@ -56,7 +57,6 @@ best_params_idx = fmin(
     trials=trials
 )
 
-# Преобразуем индексы hp.choice обратно в значения
 best_params = {
     'depth': [4, 6, 8, 10][best_params_idx['depth']],
     'learning_rate': best_params_idx['learning_rate'],
@@ -66,14 +66,3 @@ best_params = {
 }
 
 print("Лучшие параметры найдены:", best_params)
-
-
-final_model = CatBoostClassifier(
-    **best_params,
-    iterations=10000,
-    cat_features=categorical_features,
-    auto_class_weights="Balanced",
-)
-
-final_model.fit(X, y)
-joblib.dump(final_model, "CatBoost_Best_Hyperopt.pkl")
