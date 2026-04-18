@@ -1,11 +1,21 @@
 ##
-import pandas as pd
 import joblib
 from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix
 from catboost import CatBoostClassifier
 from sklearn.model_selection import train_test_split
+from train_functions import *
+from config import name
+
+# ÇÀÃĞÓÇÊÀ ÄÀÍÍÛÕ ---------------------------------------------------
 
 df = pd.read_csv("train.csv")
+
+# ÄÎÁÀÂËÅÍÈÅ ÍÎÂÛÕ ÏĞÈÇÍÀÊÎÂ ----------------------------------------
+
+df = create_new_features(df)
+
+# ÑÎÇÄÀÍÈÅ ÂÛÁÎĞÎÊ --------------------------------------------------
+
 df = df.drop(columns=["id"])
 X = df.drop("y", axis=1)
 y = df["y"]
@@ -13,60 +23,85 @@ y = df["y"]
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
-    test_size=0.15,
+    test_size=0.2,
     random_state=42,
     stratify=y)
 
 categorical_features = X_train.select_dtypes(
-    include=["object", "string"]).columns.tolist()
+    include=["object"]).columns.tolist()
 
-# hyperopt áèáëèîòåêà
-# window expand ïîäõîä ê îáó÷åíèş
-# ôàêòîğíûé àíàëèç
-# îòáîğ ôè÷åé baruto
-# èñêëş÷åíèå ôè÷åé
-# prometeus graphana - îòñëåæèâàíèå ìîäåëè
+# TE mean
+for cat_feature in categorical_features:
+    X_train, X_test = mean_target_encoding(X_train, X_test, cat_feature, y_train)
+X_train, X_test = mean_target_encoding(X_train, X_test, 'job_education', y_train)
+X_train, X_test = mean_target_encoding(X_train, X_test, 'month_contact', y_train)
+
+# ÇÀÃĞÓÇÊÀ ÇÍÀ×ÈÌÛÕ ÏĞÈÇÍÀÊÎÂ ---------------------------------------------------
+
+with open('confirmed_features.txt', 'r') as f:
+    selected_features = f.read()
+    selected_features = selected_features.replace("' ", ' ').replace('[', '').replace(']', '').replace("'", '').replace(' ', '')
+    selected_features = selected_features.split(',')
+
+X_train, X_test = X_train[selected_features], X_test[selected_features]
+
+categorical_features = X_train.select_dtypes(
+    include=["object"]).columns.tolist()
+
+##
 model = CatBoostClassifier(
-    iterations=50000,
-    learning_rate=0.03,
-    depth=6,
+    iterations=3000,
+    learning_rate=0.0858,
+    depth=8,
     loss_function="Logloss",
-    eval_metric="AUC",  # QueryCrossEntropy  "AUC"
+    eval_metric="AUC",
     cat_features=categorical_features,
-    max_ctr_complexity=2,
     auto_class_weights="Balanced",
-    l2_leaf_reg=5,
-    border_count=64,
-    bagging_temperature=1,
-    early_stopping_rounds=100,
-    verbose=False,
-    # random_seed=42,
-    task_type="GPU",
-    devices="0",
-)
+    l2_leaf_reg=0.153154,
+    verbose=True,
+    # task_type="GPU",
+    # devices="0",
+    bootstrap_type='Bernoulli',
+    random_strength=1.909318e-05,
+    subsample=0.35747)
+
+# ÎÁÓ×ÅÍÈÅ ------------------------------------------------------------------
 
 model.fit(X_train, y_train,
           eval_set=(X_test, y_test),
           use_best_model=True,
-          early_stopping_rounds=200)
+          early_stopping_rounds=250)
+
+# ÏĞÅÄÑÊÀÇÀÍÈÅ ---------------------------------------------------------------
 
 y_pred = model.predict(X_test)
 y_prob = model.predict_proba(X_test)[:, 1]
 
+# ÂÈÇÓÀËÈÇÀÖÈß ÎØÈÁÊÈ È ÌÅÒĞÈÊÈ ÊÀ×ÅÑÒÂÀ --------
 
-print("ROC-AUC:", roc_auc_score(y_test, y_pred))
+show_metrics(model, name)
 
-print(classification_report(y_test, y_pred))
-feature_importances = pd.DataFrame({
+# ÊĞÈÂÀß ROC-AUC
+
+show_roc_auc_curve(y_prob, y_test, name)
+
+print('\n', "AUC:", roc_auc_score(y_test, y_prob), '\n')
+
+# ÎÒ×¨Ò Î ÊËÀÑÑÈÔÈÊÀÖÈÈ -------------------------------------------------------
+
+print('\n', classification_report(y_test, y_pred), '\n')
+fi = pd.DataFrame({
     "feature": X_train.columns,
     "importance": model.get_feature_importance()
 }).sort_values(by="importance", ascending=False)
 
-print(feature_importances.head(10))
+print('\n', fi.head(10), '\n')
 
-matrix = confusion_matrix(y_test, y_pred.argmax(axis=1))
-print(matrix)
+#  ÌÀÒĞÈÖÀ ÎØÈÁÎÊ --------------------------------------------------------------
+matrix = confusion_matrix(y_test, y_pred)
+show_matrix(matrix, name)
 
-joblib.dump(model, r"CatBoostClassifier_model.pkl")
+joblib.dump(model, fr"models/CatBoost_{name}.pkl")
 
-print("Ìîäåëü ñîõğàíåíà")
+# Âûâîä interaction strength (ñèëà ñîâìåñòíîãî ñèãíàëà ïğèçíàêîâ) ---------------
+get_features_importance(model, X_train, name)

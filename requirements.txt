@@ -4,3 +4,9 @@ numpy <= 2.3
 joblib
 scikit-learn
 catboost
+openpyxl
+seaborn
+dotenv
+BorutaShap
+scipy<1.12.0
+optuna
