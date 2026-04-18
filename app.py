@@ -3,8 +3,11 @@ import streamlit as st
 import numpy as np
 import joblib
 from shap_file_stremlit import *
+from train_functions import create_new_features
+from config import name
 
-model = joblib.load(r"CatBoostClassifier_model.pkl")
+
+model = joblib.load(fr"models/CatBoost_{name}.pkl")
 tab1, tab2 = st.tabs(['Прогноз', 'Аналитика'])
 
 with tab1:
@@ -71,11 +74,24 @@ with tab1:
         features = np.array([[age, job, marital, education, default, balance,
                               housing, loan, contact, day, month, duration,
                               campaign, pdays, previous, poutcome]])
-        prob = model.predict_proba(features)[0][1]
+
+        df = pd.DataFrame([features[0]], columns=params)
+        for col in numeric_features:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = create_new_features(df)
+        new_features = df.values  # Для моделей, которые используют созданные фичи вместо features
+
+        # prob = model.predict_proba(features)[0][1]
+        prob = model.predict_proba(new_features)[0][1]
         st.success(f"Вероятность подписания: {prob:.2%}")
 
         # Создаём force plot и сохраняем HTML
-        html_file = save_force_plot(model, features, categorical_features, params)
+        # html_file = save_force_plot(model, features, categorical_features, params)
+        categorical_features = df.select_dtypes(
+            include=["object", "string"]).columns.tolist()
+        params = list(df.columns)
+        html_file = save_force_plot(model, new_features, categorical_features, params)
         # Встраиваем интерактивный HTML
         st.components.v1.html(
             open(html_file, 'r', encoding='utf-8').read(),
