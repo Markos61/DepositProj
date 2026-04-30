@@ -36,6 +36,12 @@ with open('confirmed_features.txt', 'r') as f:
     selected_features = f.read()
     selected_features = selected_features.replace("' ", ' ').replace('[', '').replace(']', '').replace("'", '').replace(' ', '')
     selected_features = selected_features.split(',')
+    selected_features.remove('month_cat_comb_day_TE')
+    selected_features.remove('duration_ratio_age')
+    selected_features.remove('balance_log_mul_duration')
+    selected_features.remove('_duration_sqrt')
+    selected_features.remove('poutcome_cat_comb_loan_TE')
+
 
 X_train, X_test = X_train[selected_features], X_test[selected_features]
 

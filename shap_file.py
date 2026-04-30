@@ -25,13 +25,23 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
+categorical_features = X_train.select_dtypes(
+    include=["object"]).columns.tolist()
+
 # TE mean
+for cat_feature in categorical_features:
+    X_train, X_test = mean_target_encoding(X_train, X_test, cat_feature, y_train)
 X_train, X_test = mean_target_encoding(X_train, X_test, 'job_education', y_train)
 X_train, X_test = mean_target_encoding(X_train, X_test, 'month_contact', y_train)
 
 
-categorical_features = X_train.select_dtypes(include=["object", "string"]).columns.tolist()
+# ЗАГРУЗКА ЗНАЧИМЫХ ПРИЗНАКОВ ---------------------------------------------------
+selected_features = get_selected_features()
 
+X_train, X_test = X_train[selected_features], X_test[selected_features]
+X_test = X_test[:5000]
+categorical_features = X_train.select_dtypes(
+    include=["object"]).columns.tolist()
 # Вклад фичей в результат
 model.get_feature_importance(type="Interaction")
 

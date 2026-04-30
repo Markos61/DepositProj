@@ -37,11 +37,7 @@ X_train, X_test = mean_target_encoding(X_train, X_test, 'job_education', y_train
 X_train, X_test = mean_target_encoding(X_train, X_test, 'month_contact', y_train)
 
 # «¿√–”« ¿ «Õ¿◊»Ã€’ œ–»«Õ¿ Œ¬ ---------------------------------------------------
-
-with open('confirmed_features.txt', 'r') as f:
-    selected_features = f.read()
-    selected_features = selected_features.replace("' ", ' ').replace('[', '').replace(']', '').replace("'", '').replace(' ', '')
-    selected_features = selected_features.split(',')
+selected_features = get_selected_features()
 
 X_train, X_test = X_train[selected_features], X_test[selected_features]
 
@@ -50,20 +46,23 @@ categorical_features = X_train.select_dtypes(
 
 ##
 model = CatBoostClassifier(
-    iterations=3000,
-    learning_rate=0.0858,
-    depth=8,
+    iterations=50000,
+    learning_rate=0.0349,
+    depth=7,
     loss_function="Logloss",
     eval_metric="AUC",
     cat_features=categorical_features,
-    auto_class_weights="Balanced",
-    l2_leaf_reg=0.153154,
+    l2_leaf_reg=0.45,
     verbose=True,
-    # task_type="GPU",
-    # devices="0",
+    scale_pos_weight=4,
     bootstrap_type='Bernoulli',
-    random_strength=1.909318e-05,
-    subsample=0.35747)
+    random_strength=0.826,
+    subsample=0.208,
+    min_data_in_leaf=12,
+    max_bin=224,
+    leaf_estimation_iterations=2,
+    grow_policy='Lossguide',
+    max_leaves=54)
 
 # Œ¡”◊≈Õ»≈ ------------------------------------------------------------------
 

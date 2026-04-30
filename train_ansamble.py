@@ -5,6 +5,8 @@ from sklearn.model_selection import StratifiedKFold
 from catboost import CatBoostClassifier
 from train_functions import *
 from config import name
+import warnings
+warnings.filterwarnings('ignore')
 
 # 1. ЗАГРУЗКА И ПОДГОТОВКА ДАННЫХ ---------------------------------------
 df = pd.read_csv("train.csv")
@@ -21,6 +23,10 @@ y = df["y"]
 df_pseudo = pd.read_csv("train_pseudo.csv")
 df_pseudo = create_new_features(df_pseudo)
 
+test_orig = pd.read_csv("test.csv")
+test_orig = create_new_features(test_orig)
+test_id = test_orig['id']
+
 if "id" in df_pseudo.columns:
     df_pseudo = df_pseudo.drop(columns=["id"])
 
@@ -30,29 +36,30 @@ y_pseudo = df_pseudo["y"]
 categorical_features = X.select_dtypes(include=["object"]).columns.tolist()
 
 # ЗАГРУЗКА ЗНАЧИМЫХ ПРИЗНАКОВ ---------------------------------------------------
+selected_features = get_selected_features()
 
-with open('confirmed_features.txt', 'r') as f:
-    selected_features = f.read()
-    selected_features = selected_features.replace("' ", ' ').replace('[', '').replace(']', '').replace("'", '').replace(' ', '')
-    selected_features = selected_features.split(',')
 
-##
 # 2. НАСТРОЙКИ КРОСС-ВАЛИДАЦИИ И ПАРАМЕТРЫ ------------------------------
 n_splits = 5
 skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
 params = {
-    'iterations': 3000,
-    'learning_rate': 0.0858,
-    'depth': 8,
+    'iterations': 50000,
+    'learning_rate': 0.0349,
+    'depth': 7,
     'loss_function': "Logloss",
     'eval_metric': "AUC",
     'cat_features': categorical_features,
-    'auto_class_weights': "Balanced",
-    'l2_leaf_reg': 0.153154,
+    'l2_leaf_reg': 0.45,
+    'scale_pos_weight': 4,
     'bootstrap_type': 'Bernoulli',
-    'random_strength': 1.909318e-05,
-    'subsample': 0.35747,
+    'random_strength': 0.826,
+    'subsample': 0.208,
+    'min_data_in_leaf': 12,
+    'max_bin': 224,
+    'leaf_estimation_iterations': 2,
+    'grow_policy': 'Lossguide',
+    'max_leaves': 54,
     'verbose': False,
     'task_type': "GPU",
     'devices': "0"
@@ -61,25 +68,33 @@ params = {
 models = []
 oof_preds = np.zeros(len(X))  # Массив для Out-of-Fold предсказаний
 fold_aucs = []
+all_preds = []  # Для предсказаний на тестовой выборке
 
-print(f"Обучение {n_splits}-fold кросс-валидации...\n")
+print(f"Обучение ансамбля на {n_splits}-fold кросс-валидации...\n")
 
 # 3. ЦИКЛ ОБУЧЕНИЯ ПО ФОЛДАМ --------------------------------------------
 for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
     X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
     y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+    X_test = test_orig.copy()
 
     # добавление псевдо-размеченных обучающих данных
     X_train, y_train = add_pseudo_data(X_train, X_pseudo, y_train, y_pseudo, add=True)
 
+    categorical_features = X_train.select_dtypes(include=["object"]).columns.tolist()
+
     # mean TE (Target Encoding)
     for cat_feature in categorical_features:
-        X_train, X_val = mean_target_encoding(X_train, X_val, cat_feature, y_train)
-    X_train, X_val = mean_target_encoding(X_train, X_val, 'job_education', y_train)
-    X_train, X_val = mean_target_encoding(X_train, X_val, 'month_contact', y_train)
+        X_train, X_val, X_test = mean_target_encoding(X_train, X_val, cat_feature, y_train, X_test)
+    X_train, X_val, X_test = mean_target_encoding(X_train, X_val, 'job_education', y_train, X_test)
+    X_train, X_val, X_test = mean_target_encoding(X_train, X_val, 'month_contact', y_train, X_test)
 
     X_train, X_val = X_train[selected_features], X_val[selected_features]
+    X_test = X_test[selected_features]
+
     categorical_features = X_train.select_dtypes(include=["object"]).columns.tolist()
+
+    params['cat_features'] = categorical_features
 
     model = CatBoostClassifier(**params)
 
@@ -103,6 +118,12 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
     print(f"Fold {fold + 1} завершен. AUC: {current_auc:.5f}")
     joblib.dump(model, fr"models/CatBoost_{name}_fold_{fold + 1}.pkl")
 
+    # Предсказания для тестовой выборки
+    all_preds.append(model.predict_proba(X_test)[:, 1])
+
+
+create_submission_file(all_preds, test_id, name)
+
 # 4. ИТОГОВЫЕ МЕТРИКИ (OOF) --------------------------------------------
 mean_auc = np.mean(fold_aucs)
 std_auc = np.std(fold_aucs)
@@ -120,7 +141,6 @@ oof_classes = (oof_preds > 0.5).astype(int)
 print("Classification Report (OOF):")
 print(classification_report(y, oof_classes))
 
-# Используем последнюю обученную модель для визуализации важности фичей
 # show_metrics(models[-1], name)
 
 show_roc_auc_curve(oof_preds, y, name)
