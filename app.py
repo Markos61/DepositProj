@@ -1,4 +1,6 @@
 # -*- coding: cp1251 -*-
+import numpy as np
+import pandas as pd
 import streamlit as st
 import joblib
 from shap_file_stremlit import *
@@ -50,12 +52,15 @@ months_dict = {'январь': 'jan', 'февраль': 'feb', 'март': 'mar', 'апрель': 'apr'
                'май': 'may', 'июнь': 'jun', 'июль': 'jul', 'август': 'aug', 'сентябрь': 'sep',
                'октябрь': 'oct', 'ноябрь': 'nov', 'декабрь': 'dec'}
 # ---------
-num_of_models = 5
+num_of_models = 15
 
 models = []
-for idx in range(1, num_of_models + 1):
-    model = joblib.load(fr"models/CatBoost_{inference_model_name}_fold_{idx}.pkl")
-    models.append(model)
+for model_type in ["TabM", "CatBoost", "LightGBM"]:
+    for idx in range(1, 6):
+        model = joblib.load(fr"models/{model_type}_{inference_model_name}_fold_{idx}.pkl")
+        models.append(model)
+
+meta_model = joblib.load(fr"models/meta_model_logistic_regression.pkl")
 
 params = ['age', 'job', 'marital', 'education', 'default', 'balance',
           'housing', 'loan', 'contact', 'day', 'month', 'duration',
@@ -67,14 +72,11 @@ numeric_features = ['age', 'balance', 'day', 'duration',
 categorical_features = ['job', 'marital', 'education', 'default',
                         'housing', 'loan', 'contact', 'month', 'poutcome']
 
-# Добавление логотипа
 st.write("")
 col1, col2 = st.columns([20, 1])
 
 with col2:
     st.image('image.svg', width=40)
-
-# st.sidebar.title("Навигация")
 
 selected = option_menu(
     menu_title='МОДЕЛЬ ДЛЯ ОЦЕНКИ ВЕРОЯТНОСТИ ПОДПИСАНИЯ ДОГОВОРА НА ОТКРЫТИЕ ДЕПОЗИТА',
@@ -87,8 +89,8 @@ selected = option_menu(
         "container": {"padding": "0!important", "background-color": "#fafafa"},
         "icon": {"font-size": "20px"},
         "menu-title": {
-            "color": "#FF4B4B",  # Цвет заголовка меню
-            "font-family": "Segoe UI",  # Шрифт заголовка
+            "color": "#FF4B4B",
+            "font-family": "Segoe UI",
             "font-weight": "bold",
             "font-size": "18px",
 
@@ -164,9 +166,9 @@ if selected == 'Одиночный прогноз':
         duration = st.slider("Продолжительность последнего контакта в секундах (duration)", min_value=1, max_value=4918,
                              value=1, step=1)
         st.divider()
-        campaign = st.slider("Количество контактов, совершённых в ходе маркетинговой кампании (campaign)", 1, 63, 1)
+        campaign = st.slider("Количество контактов, совершённых в ходе кампании (campaign)", 1, 63, 1)
         st.divider()
-        pdays = st.slider("Количество дней с момента последнего обращения в рамках предыдущей кампании (pdays)",
+        pdays = st.slider("Количество дней с момента последнего обращения (pdays)",
                           -1, 871, 0)
         st.divider()
         previous = st.slider("Количество контактов, совершённых до этой кампании (previous)", 0, 200, 0)
@@ -193,13 +195,33 @@ if selected == 'Одиночный прогноз':
 
         new_features = df.values  # Для моделей, которые используют созданные фичи вместо features
 
-        # prob = model.predict_proba(features)[0][1]
-        probs = []
-        for idx in range(num_of_models):
-            probs.append(models[idx].predict_proba(new_features)[0][1])
+        probs = {'TabM': [], 'CatBoost': [], 'LightGBM': []}
 
-        prob = np.mean(probs, axis=0)
-        color = "#28a745" if prob > 50 else "#FF4B4B"  # Зеленый если шанс высокий, красный если низкий
+        for idx in range(num_of_models):
+            new_features_copy = new_features.copy()
+            if idx <= 4:
+                probs['TabM'].append(models[idx].predict_proba(df)[0][1])
+            elif 5 <= idx <= 9:
+                probs['CatBoost'].append(models[idx].predict_proba(new_features)[0][1])
+            else:
+                cat_cols = df.select_dtypes(include=["object"]).columns.tolist()
+                for col in cat_cols:
+                    df[col] = df[col].astype("category")
+                probs['LightGBM'].append(models[idx].predict_proba(df)[0][1])
+
+        probs = {'TabM': [np.mean(probs['TabM'])],
+                 'CatBoost': [np.mean(probs['CatBoost'])],
+                 'LightGBM': [np.mean(probs['LightGBM'])]}
+        probs = pd.DataFrame(probs)
+
+        prob = meta_model.predict_proba(probs)[0][1]
+
+        if prob > 0.37:
+            color1, color2 = '#32e111', '#2bc10f'
+            text = 'Клиент сделает депозит'
+        else:
+            color1, color2 = '#e52d27', '#b31217'
+            text = 'Клиент не сделает депозит'
 
         st.markdown(f"""
             <style>
@@ -226,16 +248,16 @@ if selected == 'Одиночный прогноз':
                 box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
                 text-align: center;">
                 <h3 style="font-family: 'Segoe UI'; color: #31333F; margin: 0; font-size: 18px;
-                background: -webkit-linear-gradient(#e52d27, #b31217);
+                background: -webkit-linear-gradient({color1}, {color2});
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;">
-                    Вероятность открытия депозита клиентом
+                    {text}
                 </h3>
                 <p style="
                     font-family: 'Segoe UI'; 
                     font-size: 70px; 
                     font-weight: 800; 
-                    background: -webkit-linear-gradient(#e52d27, #b31217);
+                    background: -webkit-linear-gradient({color1}, {color2});
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
                     margin: 10px 0;">
@@ -245,14 +267,18 @@ if selected == 'Одиночный прогноз':
             """, unsafe_allow_html=True)
 
         categorical_features = df.select_dtypes(
-            include=["object", "string"]).columns.tolist()
+            include=["object", "string", "category"]).columns.tolist()
+
         params = list(df.columns)
         for idx in range(num_of_models):
-            html_file = save_force_plot(models[idx], new_features, categorical_features, params,
-                                        f"shap_force_{idx}.html")
+            if 5 <= idx <= 9:
+                html_file = save_force_plot(models[idx], df, categorical_features, params,
+                                            f"shap_force_{idx-5}.html")
+            else:
+                pass
 
 if selected == 'Аналитика':
-    for idx in range(num_of_models):
+    for idx in range(5):
         st.write(f'Решающие признаки для {idx + 1}-й модели')
         st.components.v1.html(
             open(f"shap_force_{idx}.html", 'r', encoding='utf-8').read(),
@@ -268,16 +294,35 @@ if selected == 'Множественный прогноз':
         # подготовка данных
         df = create_new_features(df)
         df = preprocessing(df)
+        new_features = df.values
 
-        predictions = []
+        probs = {'TabM': [], 'CatBoost': [], 'LightGBM': []}
+
         for idx in range(num_of_models):
-            predictions.append(models[idx].predict_proba(df)[:, 1])
-        predictions = np.mean(predictions, axis=0)
-        df["probability"] = predictions
-        df['result'] = df['probability'].round().astype(int)
+            new_features_copy = new_features.copy()
+            if idx <= 4:
+                probs['TabM'].append(models[idx].predict_proba(df)[:, 1])
+            elif 5 <= idx <= 9:
+                probs['CatBoost'].append(models[idx].predict_proba(new_features)[:, 1])
+            else:
+                cat_cols = df.select_dtypes(include=["object"]).columns.tolist()
+                for col in cat_cols:
+                    df[col] = df[col].astype("category")
+                probs['LightGBM'].append(models[idx].predict_proba(df)[:, 1])
+
+        tabm_mean = np.mean(probs['TabM'], axis=0) if probs['TabM'] else np.zeros(len(df))
+        cat_mean = np.mean(probs['CatBoost'], axis=0) if probs['CatBoost'] else np.zeros(len(df))
+        lgb_mean = np.mean(probs['LightGBM'], axis=0) if probs['LightGBM'] else np.zeros(len(df))
+        matrix_data = np.column_stack([tabm_mean, cat_mean, lgb_mean])
+
+        probs_df = pd.DataFrame(matrix_data, columns=['TabM', 'CatBoost', 'LightGBM'])
+
+        prob = meta_model.predict_proba(probs_df.values)[:, 1]
+
+        df["probability"] = prob
+        df['result'] = (df['probability'] >= 0.37).astype(int)
 
         st.write(df[['probability', 'result']])
 
         df.to_csv(r"prediction_results.csv", index=False)
         st.info("Результаты сохранены в prediction_results.csv")
-        # streamlit run app.py

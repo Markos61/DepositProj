@@ -126,8 +126,7 @@ print(f"ОБЩИЙ OOF ROC-AUC: {total_oof_auc:.5f}")
 print("=" * 30 + "\n")
 
 # 5. ВИЗУАЛИЗАЦИЯ И ОТЧЕТЫ (на основе OOF предсказаний) ----------------
-# Для отчетов по метрикам используем порог 0.5 к OOF предсказаниям
-oof_classes = (oof_preds > 0.5).astype(int)
+oof_classes = (oof_preds > 0.37).astype(int)
 
 print("Classification Report (OOF):")
 print(classification_report(y, oof_classes))
@@ -144,16 +143,6 @@ show_matrix(matrix, name, model_type)
 # get_features_importance(models[-1], X_train, name)
 
 print(f"Все {n_splits} моделей сохранены успешно!")
-
-df_oof = pd.DataFrame(oof_dict)
-df_test_preds = pd.DataFrame(test_preds_dict)
-
-df_oof['target'] = y.values
-
-df_oof.to_csv("oof_predictions.csv", index=False)
-df_test_preds.to_csv("test_predictions.csv", index=False)
-
-print("Предсказания успешно сохранены на диск!")
 
 X_meta = pd.DataFrame(oof_dict)
 X_test_meta = pd.DataFrame(test_preds_dict)

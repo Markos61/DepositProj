@@ -1,0 +1,1 @@
+Лучшие параметры: {'learning_rate': 0.03321120389411498, 'max_depth': 8, 'subsample': 0.9032927851389269, 'colsample_bytree': 0.8068112062476234, 'min_child_weight': 11, 'gamma': 1.8518236382018265e-07, 'reg_alpha': 9.523114035141877e-05, 'reg_lambda': 3.589293475855218e-07, 'scale_pos_weight': 1.8036569061524181}

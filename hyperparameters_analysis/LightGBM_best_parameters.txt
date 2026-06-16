@@ -1,0 +1,2 @@
+Лучшие параметры: {'max_depth': 9, 'learning_rate': 0.039549104843325994, 'num_leaves': 113, 'subsample': 0.8966142512881645, 'colsample_bytree': 0.4617296409658001, 'min_child_samples': 42, 'reg_alpha': 3.8144463982181587, 'reg_lambda': 1.4577603481733095e-07, 'scale_pos_weight': 2.903359641149129}
+Лучший AUC: 0.9716954903808731
