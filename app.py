@@ -66,27 +66,39 @@ def safe_torch_load(*args, **kwargs):
 torch.load = safe_torch_load
 
 
-def force_model_to_cpu(obj):
-    """Рекурсивно обходит внутренности модели и выжигает упоминания CUDA"""
-    if isinstance(obj, list):
+def make_everything_cpu(obj, visited=None):
+
+    if visited is None:
+        visited = set()
+
+    if id(obj) in visited:
+        return
+    visited.add(id(obj))
+
+    if isinstance(obj, (list, tuple)):
         for item in obj:
-            force_model_to_cpu(item)
-    elif hasattr(obj, '__dict__'):
-        # Меняем текстовые/объектные ссылки на устройство
-        if hasattr(obj, 'device_'):
-            obj.device_ = torch.device('cpu')
-        if hasattr(obj, 'device'):
-            obj.device = torch.device('cpu')
+            make_everything_cpu(item, visited)
 
-        # Если внутри лежит сама нейросеть (nn.Module), дублируем перенос
-        if hasattr(obj, 'model_') and hasattr(obj.model_, 'to'):
-            obj.model_.to(torch.device('cpu'))
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, torch.device) and v.type == 'cuda':
+                obj[k] = torch.device('cpu')
+            elif isinstance(v, str) and ('cuda' in v or 'gpu' in v):
+                obj[k] = 'cpu'
+            else:
+                make_everything_cpu(v, visited)
 
-        # Ныряем в специфичные для pytabkit "матрешки"
-        if hasattr(obj, 'alg_interface_'):
-            force_model_to_cpu(obj.alg_interface_)
-        if hasattr(obj, 'sub_split_interfaces_'):
-            force_model_to_cpu(obj.sub_split_interfaces_)
+    elif isinstance(obj, (torch.nn.Module, torch.Tensor)):
+        obj.to('cpu')
+
+    if hasattr(obj, '__dict__'):
+        for k, v in list(obj.__dict__.items()):
+            if isinstance(v, torch.device) and v.type == 'cuda':
+                setattr(obj, k, torch.device('cpu'))
+            elif isinstance(v, str) and ('cuda' in v or 'gpu' in v):
+                setattr(obj, k, 'cpu')
+            else:
+                make_everything_cpu(v, visited)
 
 
 models = []
@@ -94,7 +106,7 @@ for model_type in ["TabM", "CatBoost", "LightGBM"]:
     for idx in range(1, 6):
         model = joblib.load(fr"models/{model_type}_{inference_model_name}_fold_{idx}.pkl")
         if model_type == "TabM":
-            force_model_to_cpu(model)
+            make_everything_cpu(model)
         models.append(model)
 
 meta_model = joblib.load(fr"models/meta_model_logistic_regression.pkl")
