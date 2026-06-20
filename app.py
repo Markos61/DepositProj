@@ -7,6 +7,7 @@ from shap_file_stremlit import *
 from train_functions import *
 from config import inference_model_name
 from streamlit_option_menu import option_menu
+import torch
 
 st.set_page_config(layout="wide")
 
@@ -53,6 +54,16 @@ months_dict = {'€нварь': 'jan', 'февраль': 'feb', 'март': 'mar', 'апрель': 'apr'
                'окт€брь': 'oct', 'но€брь': 'nov', 'декабрь': 'dec'}
 # ---------
 num_of_models = 15
+
+original_torch_load = torch.load
+
+
+def safe_torch_load(*args, **kwargs):
+    kwargs['map_location'] = 'cpu'
+    return original_torch_load(*args, **kwargs)
+
+
+torch.load = safe_torch_load
 
 models = []
 for model_type in ["TabM", "CatBoost", "LightGBM"]:
