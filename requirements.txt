@@ -1,13 +1,41 @@
-streamlit
-pandas
-numpy <= 2.3
-joblib
-scikit-learn
-catboost
-openpyxl
-seaborn
-dotenv
-BorutaShap
-scipy<1.12.0
-optuna
-streamlit-option-menu
+# --- Веб-фреймворк и UI ---
+streamlit==1.52.2
+streamlit-option-menu==0.4.0
+
+# --- Работа с данными ---
+pandas==2.3.3
+numpy==1.26.4
+openpyxl==3.1.5
+scipy==1.11.4
+
+# --- Машинное обучение ---
+scikit-learn==1.5.2
+catboost==1.2.8
+lightgbm==4.6.0
+xgboost==3.2.0
+
+# --- Интерпретация моделей ---
+shap==0.50.0
+BorutaShap==1.0.17
+
+# --- Подбор гиперпараметров ---
+optuna==4.8.0
+optuna-integration==4.8.0
+
+# --- Графики ---
+matplotlib==3.10.8
+seaborn==0.13.2
+plotly==6.7.0
+
+# --- Утилиты ---
+joblib==1.5.3
+python-dotenv==1.2.2
+SQLAlchemy==2.0.48
+
+# --- Нейросети (строго CPU версии для Streamlit Cloud) ---
+# --extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+torchaudio==2.5.1
+torchvision==0.20.1
+pytorch-lightning==2.6.5
+pytabkit==1.5.0
