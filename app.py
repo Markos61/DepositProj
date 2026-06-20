@@ -65,13 +65,41 @@ def safe_torch_load(*args, **kwargs):
 
 torch.load = safe_torch_load
 
+
+def force_model_to_cpu(obj):
+    """Рекурсивно обходит внутренности модели и выжигает упоминания CUDA"""
+    if isinstance(obj, list):
+        for item in obj:
+            force_model_to_cpu(item)
+    elif hasattr(obj, '__dict__'):
+        # Меняем текстовые/объектные ссылки на устройство
+        if hasattr(obj, 'device_'):
+            obj.device_ = torch.device('cpu')
+        if hasattr(obj, 'device'):
+            obj.device = torch.device('cpu')
+
+        # Если внутри лежит сама нейросеть (nn.Module), дублируем перенос
+        if hasattr(obj, 'model_') and hasattr(obj.model_, 'to'):
+            obj.model_.to(torch.device('cpu'))
+
+        # Ныряем в специфичные для pytabkit "матрешки"
+        if hasattr(obj, 'alg_interface_'):
+            force_model_to_cpu(obj.alg_interface_)
+        if hasattr(obj, 'sub_split_interfaces_'):
+            force_model_to_cpu(obj.sub_split_interfaces_)
+
+
 models = []
 for model_type in ["TabM", "CatBoost", "LightGBM"]:
     for idx in range(1, 6):
         model = joblib.load(fr"models/{model_type}_{inference_model_name}_fold_{idx}.pkl")
+        if model_type == "TabM":
+            force_model_to_cpu(model)
         models.append(model)
 
 meta_model = joblib.load(fr"models/meta_model_logistic_regression.pkl")
+
+torch.load = original_torch_load
 
 params = ['age', 'job', 'marital', 'education', 'default', 'balance',
           'housing', 'loan', 'contact', 'day', 'month', 'duration',
