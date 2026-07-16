@@ -8,6 +8,7 @@ matplotlib.use("Agg")
 from train_functions import *
 from config import name
 
+
 model = joblib.load(fr"models\CatBoost_{name}_fold_1.pkl")
 
 df = pd.read_csv("train.csv")

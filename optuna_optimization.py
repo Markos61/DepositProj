@@ -30,7 +30,7 @@ for cat_feature in categorical_features:
 X_train, X_test = mean_target_encoding(X_train, X_test, 'job_education', y_train)
 X_train, X_test = mean_target_encoding(X_train, X_test, 'month_contact', y_train)
 
-model_type = "TabM"
+model_type = "CatBoost"
 
 
 def objective(trial):

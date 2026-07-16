@@ -7,7 +7,7 @@ from shap_file_stremlit import *
 from train_functions import *
 from config import inference_model_name
 from streamlit_option_menu import option_menu
-import torch
+
 
 st.set_page_config(layout="wide")
 
@@ -55,63 +55,15 @@ months_dict = {'январь': 'jan', 'февраль': 'feb', 'март': 'mar', 'апрель': 'apr'
 # ---------
 num_of_models = 15
 
-original_torch_load = torch.load
-
-
-def safe_torch_load(*args, **kwargs):
-    kwargs['map_location'] = 'cpu'
-    return original_torch_load(*args, **kwargs)
-
-
-torch.load = safe_torch_load
-
-
-def make_everything_cpu(obj, visited=None):
-
-    if visited is None:
-        visited = set()
-
-    if id(obj) in visited:
-        return
-    visited.add(id(obj))
-
-    if isinstance(obj, (list, tuple)):
-        for item in obj:
-            make_everything_cpu(item, visited)
-
-    elif isinstance(obj, dict):
-        for k, v in obj.items():
-            if isinstance(v, torch.device) and v.type == 'cuda':
-                obj[k] = torch.device('cpu')
-            elif isinstance(v, str) and ('cuda' in v or 'gpu' in v):
-                obj[k] = 'cpu'
-            else:
-                make_everything_cpu(v, visited)
-
-    elif isinstance(obj, (torch.nn.Module, torch.Tensor)):
-        obj.to('cpu')
-
-    if hasattr(obj, '__dict__'):
-        for k, v in list(obj.__dict__.items()):
-            if isinstance(v, torch.device) and v.type == 'cuda':
-                setattr(obj, k, torch.device('cpu'))
-            elif isinstance(v, str) and ('cuda' in v or 'gpu' in v):
-                setattr(obj, k, 'cpu')
-            else:
-                make_everything_cpu(v, visited)
-
 
 models = []
 for model_type in ["TabM", "CatBoost", "LightGBM"]:
     for idx in range(1, 6):
         model = joblib.load(fr"models/{model_type}_{inference_model_name}_fold_{idx}.pkl")
-        if model_type == "TabM":
-            make_everything_cpu(model)
         models.append(model)
 
 meta_model = joblib.load(fr"models/meta_model_logistic_regression.pkl")
 
-torch.load = original_torch_load
 
 params = ['age', 'job', 'marital', 'education', 'default', 'balance',
           'housing', 'loan', 'contact', 'day', 'month', 'duration',
